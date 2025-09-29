@@ -1,8 +1,21 @@
+using Inventory.Infrastructure.Persistence;
+using Inventory.Infrastructure.Tenancy;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddDbContext<InventoryDbContext>(opt =>
+{
+    var cs = builder.Configuration.GetConnectionString("Default")
+             ?? "Host=localhost;Database=inventory;Username=postgres;Password=postgres";
+    opt.UseNpgsql(cs);
+});
+
+builder.Services.AddScoped<ITenantContext, TenantContext>();
 
 var app = builder.Build();
 
@@ -13,6 +26,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<TenantResolverMiddleware>();
 app.MapControllers();
 
+app.MapGet("/", () => Results.Redirect("/swagger"));
 app.Run();
