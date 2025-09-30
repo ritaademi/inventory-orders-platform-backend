@@ -4,11 +4,7 @@ using Inventory.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Inventory.Infrastructure.Persistence
 {
@@ -23,9 +19,15 @@ namespace Inventory.Infrastructure.Persistence
         }
 
         public DbSet<Tenant> Tenants => Set<Tenant>();
+        public DbSet<Inventory.Domain.Users.User> Users => Set<Inventory.Domain.Users.User>();
+        public DbSet<Inventory.Domain.Auth.Role> Roles => Set<Inventory.Domain.Auth.Role>();
+        public DbSet<Inventory.Domain.Auth.UserRole> UserRoles => Set<Inventory.Domain.Auth.UserRole>();
+        public DbSet<Inventory.Domain.Auth.RefreshToken> RefreshTokens => Set<Inventory.Domain.Auth.RefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.ApplyConfigurationsFromAssembly(typeof(InventoryDbContext).Assembly);
+
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<Tenant>(b =>
