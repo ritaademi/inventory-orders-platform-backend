@@ -1,4 +1,5 @@
-﻿using Inventory.Domain.Tenants;
+﻿using Inventory.Api.Tenants;
+using Inventory.Domain.Tenants;
 using Inventory.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +12,6 @@ namespace Inventory.Api.Controllers
     {
         private readonly InventoryDbContext _db;
         public TenantsController(InventoryDbContext db) => _db = db;
-
-        public record CreateTenantRequest(string Name, string? Domain);
 
         [HttpPost]
         public async Task<ActionResult<Tenant>> Create([FromBody] CreateTenantRequest req, CancellationToken ct)

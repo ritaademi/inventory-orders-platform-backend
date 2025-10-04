@@ -1,10 +1,15 @@
+using FluentValidation.AspNetCore;
+using FluentValidation;
 using Inventory.Infrastructure.Persistence;
 using Inventory.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
+using Inventory.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -26,6 +31,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<TenantResolverMiddleware>();
 app.MapControllers();
 
