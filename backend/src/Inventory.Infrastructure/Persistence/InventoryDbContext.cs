@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq.Expressions;
+using Inventory.Domain.Auth;
 
 namespace Inventory.Infrastructure.Persistence
 {
@@ -23,6 +24,8 @@ namespace Inventory.Infrastructure.Persistence
         public DbSet<Inventory.Domain.Auth.Role> Roles => Set<Inventory.Domain.Auth.Role>();
         public DbSet<Inventory.Domain.Auth.UserRole> UserRoles => Set<Inventory.Domain.Auth.UserRole>();
         public DbSet<Inventory.Domain.Auth.RefreshToken> RefreshTokens => Set<Inventory.Domain.Auth.RefreshToken>();
+        public DbSet<Permission> Permissions => Set<Permission>();
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -56,6 +59,8 @@ namespace Inventory.Infrastructure.Persistence
                     var lambda = Expression.Lambda(body, param);
 
                     modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
+                    modelBuilder.ApplyConfiguration(new Inventory.Infrastructure.Persistence.Configurations.PermissionConfig());
+                    modelBuilder.ApplyConfiguration(new Inventory.Infrastructure.Persistence.Configurations.RolePermissionConfig());
                 }
 
                 if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
@@ -86,5 +91,6 @@ namespace Inventory.Infrastructure.Persistence
             }
             return base.SaveChangesAsync(cancellationToken);
         }
+        
     }
 }

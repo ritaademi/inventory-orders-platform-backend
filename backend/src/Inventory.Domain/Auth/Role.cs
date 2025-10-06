@@ -12,5 +12,7 @@ namespace Inventory.Domain.Auth
     {
         public string Name { get; set; } = default!;
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+        public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
+
     }
 }
