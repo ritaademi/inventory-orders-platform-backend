@@ -1,39 +1,47 @@
-using FluentValidation.AspNetCore;
-using FluentValidation;
-using Inventory.Infrastructure.Persistence;
-using Inventory.Infrastructure.Tenancy;
+using Inventory.Api.Data;
+using Inventory.Api.Services;
 using Microsoft.EntityFrameworkCore;
-using Inventory.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Shtoni shërbimet për controllers
 builder.Services.AddControllers();
-builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
+
+// Shtoni Swagger për dokumentimin e API-së
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddDbContext<InventoryDbContext>(opt =>
+// Regjistro DbContext për lidhjen me bazën e të dhënave PostgreSQL
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     var cs = builder.Configuration.GetConnectionString("Default")
              ?? "Host=localhost;Database=inventory;Username=postgres;Password=postgres";
-    opt.UseNpgsql(cs);
+    options.UseNpgsql(cs);
 });
 
-builder.Services.AddScoped<ITenantContext, TenantContext>();
+// Regjistro shërbimin StockMovementService për Dependency Injection
+builder.Services.AddScoped<IStockMovementService, StockMovementService>();
 
 var app = builder.Build();
 
+// Aktivizo Swagger në zhvillim
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API V1");
+        c.RoutePrefix = string.Empty;  // Swagger në rrugën kryesore: http://localhost:port/
+    });
 }
 
+// Aktivizo HTTPS
 app.UseHttpsRedirection();
-app.UseMiddleware<ExceptionMiddleware>();
-app.UseMiddleware<TenantResolverMiddleware>();
+
+// Mape për controller-at
 app.MapControllers();
 
+// Rruga kryesore e redirect për Swagger
 app.MapGet("/", () => Results.Redirect("/swagger"));
+
 app.Run();
