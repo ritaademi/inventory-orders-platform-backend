@@ -8,18 +8,27 @@ using FluentValidation;
 using Inventory.Infrastructure.Persistence;
 using Inventory.Infrastructure.Tenancy;
 using Microsoft.EntityFrameworkCore;
-using Inventory.Api.Middleware;
+using Inventory.Api.Middleware; 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
+var env = builder.Environment;
 
-// Shtoni shërbimet për controllers
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
+if (env.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>();
+}
+
 builder.Services.AddControllers();
-
-// Shtoni Swagger për dokumentimin e API-së
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
