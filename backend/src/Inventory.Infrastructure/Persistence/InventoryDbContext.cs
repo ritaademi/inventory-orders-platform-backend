@@ -26,6 +26,10 @@ namespace Inventory.Infrastructure.Persistence
         public DbSet<Inventory.Domain.Auth.RefreshToken> RefreshTokens => Set<Inventory.Domain.Auth.RefreshToken>();
         public DbSet<Permission> Permissions => Set<Permission>();
         public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+        public DbSet<Inventory.Domain.Catalog.Category> Categories => Set<Inventory.Domain.Catalog.Category>();
+        public DbSet<Inventory.Domain.Catalog.UnitOfMeasure> Uoms => Set<Inventory.Domain.Catalog.UnitOfMeasure>();
+        public DbSet<Inventory.Domain.Catalog.Product> Products => Set<Inventory.Domain.Catalog.Product>();
+        public DbSet<Inventory.Domain.Catalog.ProductVariant> ProductVariants => Set<Inventory.Domain.Catalog.ProductVariant>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
