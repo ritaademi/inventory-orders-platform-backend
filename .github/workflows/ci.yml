@@ -1,0 +1,78 @@
+name: .NET CI
+
+on:
+  push:
+    branches: [main, dev, feature/**, feat/**, chore/**]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: inv
+          POSTGRES_PASSWORD: invpw
+          POSTGRES_DB: inventory
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U inv -d inventory"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # DB connection for API and integration tests
+      ConnectionStrings__Default: Host=localhost;Port=5432;Database=inventory;Username=inv;Password=invpw
+
+      # JWT (dummy for CI)
+      Jwt__Key: gh_ci_dummy_secret_change_me
+      Jwt__Issuer: Inventory.Api
+      Jwt__Audience: Inventory.Api
+      Jwt__AccessTokenMinutes: 30
+      Jwt__RefreshTokenDays: 7
+
+      # optional seeding variables (won't affect if your seeding respects Development only)
+      Seed__Enabled: true
+      Seed__OwnerPassword: Passw0rd!
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore ./Inventory.sln
+
+      - name: Build
+        run: dotnet build ./Inventory.sln -c Release --no-restore
+
+      # Ensure schema exists for integration tests
+      - name: Apply EF migrations
+        run: |
+          dotnet tool update --global dotnet-ef
+          dotnet ef database update \
+            --project backend/src/Inventory.Infrastructure \
+            --startup-project backend/src/Inventory.Api
+
+      - name: Test
+        run: dotnet test ./Inventory.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/TestResults/*.trx"
