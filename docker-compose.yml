@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: inv-pg
+    environment:
+      POSTGRES_USER: inv
+      POSTGRES_PASSWORD: invpw
+      POSTGRES_DB: inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inv -d inventory"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/src/Inventory.Api/Dockerfile
+    container_name: inv-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=db;Port=5432;Database=inventory;Username=inv;Password=invpw
+      Seed__Enabled: "true"
+      Seed__TenantName: "Acme"
+      Seed__TenantDomain: "acme.local"
+      Seed__OwnerEmail: "owner@acme.com"
+      Seed__OwnerPassword: "Passw0rd!"
+      Seed__OwnerFullName: "Acme Owner"
+      Jwt__Key: "local_dev_secret_change_me_please"
+      Jwt__Issuer: "Inventory.Api"
+      Jwt__Audience: "Inventory.Api"
+      Jwt__AccessTokenMinutes: "30"
+      Jwt__RefreshTokenDays: "7"
+    ports:
+      - "8080:8080"
+volumes:
+  pgdata:

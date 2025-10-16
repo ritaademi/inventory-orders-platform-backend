@@ -1,0 +1,12 @@
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/node_modules
+*.user
+*.suo
+*.swp
+*.log
+.git
+.gitignore
+secrets.json
