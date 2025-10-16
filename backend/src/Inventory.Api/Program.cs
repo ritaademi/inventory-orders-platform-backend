@@ -1,108 +1,152 @@
-    using Inventory.Api.Data;
-    using Inventory.Api.Services;
-    using System.Text;
-    using Inventory.Api.Auth;
-    using Inventory.Domain.Users;
-    using FluentValidation.AspNetCore;
-    using FluentValidation;
-    using Inventory.Infrastructure.Persistence;
-    using Inventory.Infrastructure.Tenancy;
-    using Microsoft.EntityFrameworkCore;
-    using Inventory.Api.Middleware; 
-    using Microsoft.AspNetCore.Authentication.JwtBearer;
-    using Microsoft.AspNetCore.Identity;
-    using Microsoft.Extensions.Options;
-    using Microsoft.IdentityModel.Tokens;
-    using Npgsql;
-    using Inventory.Api.Seeding;
+using System.Text;
+using Inventory.Api.Auth;
+using Inventory.Api.Middleware;
+using Inventory.Api.Seeding;
+using Inventory.Domain.Users;
+using Inventory.Infrastructure;
+using Inventory.Infrastructure.Persistence;
+using Inventory.Infrastructure.Tenancy;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
-    var builder = WebApplication.CreateBuilder(args);
-    var env = builder.Environment;
+var builder = WebApplication.CreateBuilder(args);
+var env = builder.Environment;
 
-    builder.Configuration
-        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-        .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true)
-        .AddEnvironmentVariables();
+// Configuration sources
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
 
-    if (env.IsDevelopment())
-    {
-        builder.Configuration.AddUserSecrets<Program>();
-    }
-
-    builder.Services.AddControllers();
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
-
-    // Regjistro DbContext për lidhjen me bazën e të dhënave PostgreSQL
-    builder.Services.AddDbContext<InventoryDbContext>(options =>
+if (env.IsDevelopment())
 {
-    var cs = builder.Configuration.GetConnectionString("Default")
-             ?? "Host=localhost;Database=inventory;Username=postgres;Password=postgres";
-    options.UseNpgsql(cs);
-});
+    builder.Configuration.AddUserSecrets<Program>();
+}
 
+// MVC & Swagger
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Inventory API", Version = "v1" });
 
-    // Regjistro shërbimin StockMovementService për Dependency Injection
-    builder.Services.AddScoped<IStockMovementService, StockMovementService>();
-    builder.Services.AddScoped<ITenantContext, TenantContext>();
-    builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
-    builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-    builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
-    builder.Services.AddScoped<DbSeeder>();
-
-    var jwtOpts = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
-    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOpts.Key));
-
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(o =>
-        {
-            o.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = key,
-                ValidateIssuer = !string.IsNullOrWhiteSpace(jwtOpts.Issuer),
-                ValidIssuer = jwtOpts.Issuer,
-                ValidateAudience = !string.IsNullOrWhiteSpace(jwtOpts.Audience),
-                ValidAudience = jwtOpts.Audience,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromSeconds(30)
-            };
-        });
-
-        builder.Services.AddAuthorization(o =>
+    // JWT Bearer
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        o.AddPolicy("RequireTenant", p => p.RequireClaim("tenant"));
-        o.AddPolicy("AdminOnly", p => p.RequireRole("Owner", "Admin"));
-        o.AddPolicy("ManageInventory", p => p.RequireRole("Owner", "Admin", "Manager"));
-        o.AddPolicy("ManageOrders", p => p.RequireRole("Owner", "Admin", "Manager"));
+        Description = "JWT Authorization header. Example: Bearer {token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+      {
+        new OpenApiSecurityScheme {
+          Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+        },
+        Array.Empty<string>()
+      }
     });
 
-    var app = builder.Build();
-
-    // Aktivizo Swagger në zhvillim
-    if (app.Environment.IsDevelopment())
+    // X-Tenant-ID header
+    c.AddSecurityDefinition("Tenant", new OpenApiSecurityScheme
     {
-        app.UseSwagger();
-        app.UseSwaggerUI(c =>
+        Description = "Multi-tenancy header (X-Tenant-ID)",
+        Name = "X-Tenant-ID",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+      {
+        new OpenApiSecurityScheme {
+          Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Tenant" }
+        },
+        Array.Empty<string>()
+      }
+    });
+});
+
+// Infrastructure (DbContext, TenantContext, interceptors, services, etc.)
+builder.Services.AddInfrastructure(builder.Configuration);
+
+// Services & Auth
+builder.Services.AddScoped<DbSeeder>();
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+// JWT auth
+var jwtOpts = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
+var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOpts.Key));
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =>
+    {
+        o.TokenValidationParameters = new TokenValidationParameters
         {
-            c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API V1");
-            c.RoutePrefix = string.Empty;  // Swagger në rrugën kryesore: http://localhost:port/
-        });
-    }
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtOpts.Issuer),
+            ValidIssuer = jwtOpts.Issuer,
+            ValidateAudience = !string.IsNullOrWhiteSpace(jwtOpts.Audience),
+            ValidAudience = jwtOpts.Audience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
 
-    // Aktivizo HTTPS
-    app.UseHttpsRedirection();
+builder.Services.AddAuthorization(o =>
+{
+    o.AddPolicy("RequireTenant", p => p.RequireClaim("tenant"));
+    o.AddPolicy("AdminOnly", p => p.RequireRole("Owner", "Admin"));
+    o.AddPolicy("ManageInventory", p => p.RequireRole("Owner", "Admin", "Manager"));
+    o.AddPolicy("ManageOrders", p => p.RequireRole("Owner", "Admin", "Manager"));
+});
 
-    // Mape për controller-at
-    app.UseMiddleware<ExceptionMiddleware>();
-    app.UseMiddleware<TenantResolverMiddleware>();
-    app.UseAuthentication();
-    app.UseAuthorization();
-    app.MapControllers();
+var app = builder.Build();
 
-    // Rruga kryesore e redirect për Swagger
-    app.MapGet("/", () => Results.Redirect("/swagger"));
+// Seeder on startup (Dev/Local as configured)
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
+    await seeder.SeedAsync();
+}
 
-    await app.MigrateAndSeedAsync();
+// Swagger in Development
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API V1");
+        c.RoutePrefix = string.Empty; // swagger at root
+    });
+}
 
-    app.Run();
+app.UseHttpsRedirection();
+
+// Global exception handler (nëse ke ExceptionMiddleware)
+app.UseMiddleware<ExceptionMiddleware>();
+
+app.UseAuthentication();
+
+// Multi-tenant header middleware (vendos X-Tenant-ID -> TenantContext)
+app.UseMiddleware<TenantResolutionMiddleware>();
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+// redirect root → swagger
+app.MapGet("/", () => Results.Redirect("/swagger"));
+
+// apply migrations + seed (nëse ke extensionin)
+await app.MigrateAndSeedAsync();
+
+app.Run();
