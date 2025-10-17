@@ -18,7 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<InventoryDbContext>((sp, opts) =>
         {
             var cs = cfg.GetConnectionString("DefaultConnection")
-                     ?? "Host=localhost;Port=5432;Database=inventory;Username=postgres;Password=postgres";
+                     ?? "Host=localhost;Port=5432;Database=inventory;Username=postgres;Password=ritaademi";
             opts.UseNpgsql(cs);
             opts.AddInterceptors(sp.GetRequiredService<TenantSaveChangesInterceptor>());
         });
