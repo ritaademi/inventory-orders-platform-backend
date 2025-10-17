@@ -3,11 +3,12 @@ using Inventory.Domain.Tenants;
 using Inventory.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Inventory.Api.Controllers
 {
     [ApiController]
-    [Route("api/tenants")]
+    [Route("api/[controller]")]
     public class TenantsController : ControllerBase
     {
         private readonly InventoryDbContext _db;
@@ -30,6 +31,10 @@ namespace Inventory.Api.Controllers
         }
 
         [HttpGet]
-        public ActionResult<IEnumerable<Tenant>> List() => Ok(_db.Tenants.OrderBy(x => x.CreatedAt).ToList());
+        public async Task<ActionResult<IEnumerable<Tenant>>> List(CancellationToken ct)
+        {
+            var items = await _db.Tenants.OrderBy(t => t.Name).ToListAsync(ct);
+            return Ok(items);
+        }
     }
 }
