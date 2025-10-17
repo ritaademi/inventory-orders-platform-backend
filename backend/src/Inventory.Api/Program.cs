@@ -117,6 +117,15 @@ var app = builder.Build();
 //    await seeder.SeedAsync();
 //}
 
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy("fe", p => p
+        .WithOrigins("http://localhost:3000", "http://127.0.0.1:3000")
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials());
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -128,6 +137,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("fe");
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<Inventory.Infrastructure.Tenancy.TenantResolverMiddleware>();
