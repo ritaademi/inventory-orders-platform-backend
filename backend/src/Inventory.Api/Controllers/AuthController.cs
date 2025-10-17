@@ -16,6 +16,9 @@ namespace Inventory.Api.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
+    public record UserDto(Guid Id, string Email, string? FullName, string[] Roles);
+    public record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAtUtc, UserDto User);
+
     private readonly InventoryDbContext _db;
     private readonly ITenantContext _tenant;
     private readonly IJwtTokenService _tokens;
@@ -35,7 +38,7 @@ public class AuthController : ControllerBase
     // POST /auth/register  (first user per tenant becomes Owner)
     [HttpPost("register")]
     [AllowAnonymous]
-    public async Task<ActionResult<TokenResponse>> Register([FromBody] RegisterDto dto, CancellationToken ct)
+    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is null) return BadRequest("Missing X-Tenant-Id header.");
 
@@ -73,13 +76,13 @@ public class AuthController : ControllerBase
 
         var roles = new[] { "Owner" };
         var access = _tokens.CreateAccessToken(user, user.TenantId, roles, out var exp);
-        return Ok(new TokenResponse(access, refresh.Token, exp));
+        return Ok(new AuthResponse(access, refresh.Token, exp, MapUser(user)));
     }
 
     // POST /auth/login
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<TokenResponse>> Login([FromBody] LoginDto dto, CancellationToken ct)
+    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is null) return BadRequest("Missing X-Tenant-Id header.");
 
@@ -112,13 +115,13 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         var access = _tokens.CreateAccessToken(user, user.TenantId, roles, out var exp);
-        return Ok(new TokenResponse(access, refresh.Token, exp));
+        return Ok(new AuthResponse(access, refresh.Token, exp, MapUser(user)));
     }
 
     // POST /auth/refresh
     [HttpPost("refresh")]
     [AllowAnonymous]
-    public async Task<ActionResult<TokenResponse>> Refresh([FromBody] RefreshRequest body, CancellationToken ct)
+    public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest body, CancellationToken ct)
     {
         if (_tenant.TenantId is null) return BadRequest("Missing X-Tenant-Id header.");
         var token = await _db.RefreshTokens
@@ -144,7 +147,7 @@ public class AuthController : ControllerBase
         var access = _tokens.CreateAccessToken(token.User, token.TenantId, roles, out var exp);
         await _db.SaveChangesAsync(ct);
 
-        return Ok(new TokenResponse(access, newRefresh.Token, exp));
+        return Ok(new AuthResponse(access, newRefresh.Token, exp, MapUser(token.User)));
     }
 
     // POST /auth/logout  (revoke all active refresh tokens for current user)
@@ -169,4 +172,13 @@ public class AuthController : ControllerBase
             .Select(n => new Role { Name = n });
         if (toAdd.Any()) _db.Roles.AddRange(toAdd);
     }
+
+    private static UserDto MapUser(User u) =>
+    new UserDto(
+        u.Id,
+        u.Email,
+        u.FullName,
+        u.UserRoles.Select(ur => ur.Role.Name).ToArray()
+    );
+
 }
