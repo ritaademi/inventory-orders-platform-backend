@@ -1,13 +1,10 @@
-using Inventory.Api.Models;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using Inventory.Domain.Products;
 
 namespace Inventory.Api.Services
 {
     public interface IStockMovementService
     {
-        Task<StockMovement> CreateStockMovementAsync(StockMovement movement);
-        Task<List<StockMovement>> GetAllAsync();
-        Task<StockMovement> GetByIdAsync(int id);
+        Task<StockMovement> CreateAsync(int stockItemId, int quantityChange, string? note, CancellationToken ct = default);
+        Task<IReadOnlyList<StockMovement>> ListAsync(int stockItemId, int page = 1, int pageSize = 50, CancellationToken ct = default);
     }
 }
