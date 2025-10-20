@@ -115,7 +115,8 @@ builder.Services.AddAuthorization(o =>
 // Infrastructure (DI shtesë nga projekti)
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<DbSeeder>();
-
+builder.Services.AddScoped<Inventory.Api.Services.IStockMovementService, Inventory.Api.Services.StockMovementService>();
+builder.Services.AddMemoryCache();
 // CORS – DUHET të jetë para Build()
 builder.Services.AddCors(opt =>
 {
