@@ -9,7 +9,6 @@ using Inventory.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -26,8 +25,10 @@ if (env.IsDevelopment())
     builder.Configuration.AddUserSecrets<Program>();
 }
 
+// ---------------------- SERVICES (para builder.Build) ----------------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Inventory API", Version = "v1" });
@@ -67,16 +68,21 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+
 builder.Services.AddScoped<Inventory.Infrastructure.Tenancy.ITenantContext, Inventory.Infrastructure.Tenancy.TenantContext>();
+
+// Lexo "DefaultConnection" (ose bie te "Default" si fallback)
+var connectionString =
+    builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? builder.Configuration.GetConnectionString("Default")
+    ?? throw new InvalidOperationException("No connection string found (DefaultConnection/Default).");
+
 builder.Services.AddDbContext<InventoryDbContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
-
-
+    opt.UseNpgsql(connectionString));
 
 var jwtOpts = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;
 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOpts.Key));
@@ -106,17 +112,11 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("ManageOrders", p => p.RequireRole("Owner", "Admin", "Manager"));
 });
 
+// Infrastructure (DI shtesë nga projekti)
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<DbSeeder>();
 
-var app = builder.Build();
-
-//using (var scope = app.Services.CreateScope())
-//{
-//    var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
-//    await seeder.SeedAsync();
-//}
-
+// CORS – DUHET të jetë para Build()
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("fe", p => p
@@ -126,6 +126,10 @@ builder.Services.AddCors(opt =>
         .AllowCredentials());
 });
 
+// ---------------------- BUILD ----------------------
+var app = builder.Build();
+
+// ---------------------- MIDDLEWARE ----------------------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -142,9 +146,14 @@ app.UseMiddleware<ExceptionMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<Inventory.Infrastructure.Tenancy.TenantResolverMiddleware>();
 app.UseAuthorization();
+
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
-await app.MigrateAndSeedAsync();
+// Migrime + Seed opsionale (për PR pa DB lokale)
+if (app.Configuration.GetValue<bool>("RunMigrations"))
+{
+    await app.MigrateAndSeedAsync();
+}
 
 app.Run();
