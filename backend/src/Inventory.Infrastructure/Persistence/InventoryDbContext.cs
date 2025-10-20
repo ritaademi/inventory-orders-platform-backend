@@ -3,6 +3,7 @@ using Inventory.Application.Multitenancy;
 using Inventory.Domain.Auth;
 using Inventory.Domain.Catalog;
 using Inventory.Domain.Common;
+using Inventory.Domain.Products;   // <-- SIGUROJE këtë 'using'
 using Inventory.Domain.Tenants;
 using Inventory.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,10 @@ public class InventoryDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
 
+    // Inventory
+    public DbSet<StockItem> StockItems => Set<StockItem>();
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();   // <-- SHTUAR
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -39,7 +44,7 @@ public class InventoryDbContext : DbContext
         // Apply IEntityTypeConfiguration<> from this assembly (Infrastructure)
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(InventoryDbContext).Assembly);
 
-        // Tenants table config
+        // Tenants table config (shembull bazë — përshtate me konfigurimet e tua)
         modelBuilder.Entity<Tenant>(b =>
         {
             b.ToTable("tenants");
@@ -49,7 +54,14 @@ public class InventoryDbContext : DbContext
             b.Property(x => x.IsActive).HasDefaultValue(true);
         });
 
-        // Global query filters: Tenant + SoftDelete (combined per-entity)
+        // Relacion bazë për StockMovement → StockItem (nëse s'ke konfigurim tjetër fluent)
+        modelBuilder.Entity<StockMovement>()
+            .HasOne(m => m.StockItem)
+            .WithMany() // ose .WithMany(i => i.Movements) nëse e ke koleksionin në StockItem
+            .HasForeignKey(m => m.StockItemId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Global query filters: Tenant + SoftDelete (kombinuar per-entity)
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             var clr = entityType.ClrType;
@@ -64,11 +76,12 @@ public class InventoryDbContext : DbContext
 
             if (isTenantScoped)
             {
-                // (tenant == null) || (e.TenantId == tenant.Value)
-                var tenantIdProp = Expression.Property(param, nameof(ITenantScoped.TenantId));
-                var ctxTenantId  = Expression.Constant(_tenant.TenantId, typeof(Guid?));
+                // (TenantId kontekstual është null) OSE (e.TenantId == _tenant.TenantId.Value)
+                var tenantIdProp = Expression.Property(param, nameof(ITenantScoped.TenantId));   // e.TenantId
+                var ctxTenantId  = Expression.Constant(_tenant.TenantId, typeof(Guid?));        // _tenant.TenantId
                 var tenantNull   = Expression.Equal(ctxTenantId, Expression.Constant(null, typeof(Guid?)));
-                var tenantEq     = Expression.Equal(tenantIdProp, Expression.Property(ctxTenantId, "Value"));
+                var tenantValue  = Expression.Property(ctxTenantId, "Value");                   // _tenant.TenantId.Value
+                var tenantEq     = Expression.Equal(tenantIdProp, tenantValue);
                 body = Expression.AndAlso(body, Expression.OrElse(tenantNull, tenantEq));
             }
 
@@ -81,7 +94,7 @@ public class InventoryDbContext : DbContext
             }
 
             var lambda = Expression.Lambda(body, param);
-            modelBuilder.Entity(clr).HasQueryFilter(lambda);
+            modelBuilder.Entity(clr).HasQueryFilter(lambda);   // OK: EF Core pranon LambdaExpression non-generic
         }
     }
 
@@ -98,7 +111,7 @@ public class InventoryDbContext : DbContext
                 entry.Entity.UpdatedAt = now;
         }
 
-        // set TenantId automatically on Added/Modified for tenant-scoped entities
+        // set TenantId automatikisht për entitetët tenant-scoped
         if (_tenant.TenantId.HasValue)
         {
             foreach (var entry in ChangeTracker.Entries())
