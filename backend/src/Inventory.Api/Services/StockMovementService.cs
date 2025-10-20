@@ -1,59 +1,52 @@
-using Inventory.Api.Data;
-using Inventory.Api.Models;
+using Inventory.Domain.Products;
+using Inventory.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace Inventory.Api.Services
 {
-    public class StockMovementService : IStockMovementService
+    public sealed class StockMovementService : IStockMovementService
     {
-        private readonly ApplicationDbContext _context;
+        private readonly InventoryDbContext _db;
 
-        public StockMovementService(ApplicationDbContext context)
+        public StockMovementService(InventoryDbContext db) => _db = db;
+
+        public async Task<StockMovement> CreateAsync(int stockItemId, int quantityChange, string? note, CancellationToken ct = default)
         {
-            _context = context;
-        }
+            // verifiko që StockItem ekziston dhe s’është soft-deleted
+            var item = await _db.Set<StockItem>().FirstOrDefaultAsync(x => x.Id == stockItemId && !x.IsDeleted, ct);
+            if (item is null)
+                throw new KeyNotFoundException($"StockItem {stockItemId} not found.");
 
-        public async Task<StockMovement> CreateStockMovementAsync(StockMovement movement)
-        {
-            // Update StockItem quantity based on movement type
-            var item = await _context.StockItems.FirstOrDefaultAsync(i => i.Id == movement.StockItemId);
-            if (item == null)
+            var movement = new StockMovement
             {
-                throw new KeyNotFoundException("StockItem not found.");
-            }
+                StockItemId = stockItemId,
+                QuantityChange = quantityChange,
+                Note = note,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
 
-            if (movement.Type == "IN")
-            {
-                item.Quantity += movement.Quantity;
-            }
-            else if (movement.Type == "OUT")
-            {
-                if (item.Quantity < movement.Quantity)
-                    throw new InvalidOperationException("Insufficient stock.");
-                item.Quantity -= movement.Quantity;
-            }
-            else if (movement.Type == "TRANSFER")
-            {
-                // Future: Implement logic for transfer between warehouses
-                throw new NotImplementedException("Transfer logic not implemented yet.");
-            }
+            // përditëso edhe sasinë (nëse kështu e do logjika jote)
+            item.Quantity += quantityChange;
+            if (item.Quantity < 0) item.Quantity = 0;
 
-            _context.StockMovements.Add(movement);
-            await _context.SaveChangesAsync();
+            _db.Add(movement);
+            await _db.SaveChangesAsync(ct);
+
             return movement;
         }
 
-        public async Task<List<StockMovement>> GetAllAsync()
+        public async Task<IReadOnlyList<StockMovement>> ListAsync(int stockItemId, int page = 1, int pageSize = 50, CancellationToken ct = default)
         {
-            return await _context.StockMovements.Include(m => m.StockItem).ToListAsync();
-        }
+            if (page <= 0) page = 1;
+            if (pageSize <= 0 || pageSize > 200) pageSize = 50;
 
-        public async Task<StockMovement> GetByIdAsync(int id)
-        {
-            return await _context.StockMovements.Include(m => m.StockItem)
-                                                .FirstOrDefaultAsync(m => m.Id == id);
+            return await _db.Set<StockMovement>()
+                .AsNoTracking()
+                .Where(m => m.StockItemId == stockItemId)
+                .OrderByDescending(m => m.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(ct);
         }
     }
 }

@@ -1,55 +1,40 @@
-using Inventory.Api.Models;
 using Inventory.Api.Services;
+using Inventory.Domain.Products;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
 
 namespace Inventory.Api.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
-    public class StockMovementController : ControllerBase
+    [Route("api/[controller]")]
+    [Authorize(Policy = "ManageInventory")]
+    public sealed class StockMovementController : ControllerBase
     {
-        private readonly IStockMovementService _service;
+        private readonly IStockMovementService _svc;
 
-        public StockMovementController(IStockMovementService service)
-        {
-            _service = service;
-        }
+        public StockMovementController(IStockMovementService svc) => _svc = svc;
 
-        // POST: api/stockmovement
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] StockMovement movement)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            try
-            {
-                var created = await _service.CreateStockMovementAsync(movement);
-                return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-            }
-            catch (System.Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        // GET: api/stockmovement
+        // GET /api/stockmovement?stockItemId=1&page=1&pageSize=50
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<ActionResult<IReadOnlyList<StockMovement>>> List([FromQuery] int stockItemId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
-            var list = await _service.GetAllAsync();
+            var list = await _svc.ListAsync(stockItemId, page, pageSize, HttpContext.RequestAborted);
             return Ok(list);
         }
 
-        // GET: api/stockmovement/{id}
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(int id)
+        // POST /api/stockmovement
+        [HttpPost]
+        public async Task<ActionResult<StockMovement>> Create([FromBody] CreateStockMovementRequest req)
         {
-            var movement = await _service.GetByIdAsync(id);
-            if (movement == null)
-                return NotFound();
-            return Ok(movement);
+            var created = await _svc.CreateAsync(req.StockItemId, req.QuantityChange, req.Note, HttpContext.RequestAborted);
+            return CreatedAtAction(nameof(List), new { stockItemId = created.StockItemId }, created);
+        }
+
+        public sealed class CreateStockMovementRequest
+        {
+            public int StockItemId { get; set; }
+            public int QuantityChange { get; set; } // +in, -out
+            public string? Note { get; set; }
         }
     }
 }
