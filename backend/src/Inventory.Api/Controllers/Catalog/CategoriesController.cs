@@ -3,6 +3,7 @@ using Inventory.Domain.Catalog;
 using Inventory.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
 namespace Inventory.Api.Controllers.Catalog
@@ -62,5 +63,9 @@ namespace Inventory.Api.Controllers.Catalog
             await _db.SaveChangesAsync(ct);
             return NoContent();
         }
+
+        [HttpGet("all")]
+        public async Task<ActionResult<IEnumerable<Category>>> All(CancellationToken ct)
+        => Ok(await _db.Categories.OrderBy(x => x.Name).ToListAsync(ct));
     }
 }
