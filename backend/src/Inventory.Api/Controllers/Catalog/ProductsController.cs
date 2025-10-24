@@ -92,5 +92,10 @@ namespace Inventory.Api.Controllers.Catalog
             await _db.SaveChangesAsync(ct);
             return NoContent();
         }
+
+        [HttpGet("all")]
+        public async Task<ActionResult<IEnumerable<Product>>> All(CancellationToken ct)
+        => Ok(await _db.Products.OrderBy(x => x.Name).ToListAsync(ct));
+
     }
 }
